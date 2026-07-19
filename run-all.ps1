@@ -27,9 +27,14 @@ Set-Location $ProjectRoot
 
 Write-Header "Big Data Platform - AWS LocalStack EKS 쿠버네티스 원클릭 자동 배포 시작"
 
-# 1. LocalStack 및 인프라 시작
-Write-Header "Step 1/8: LocalStack 및 미들웨어 컨테이너 확인 중..."
-docker-compose up -d localstack postgres cassandra redis zookeeper kafka
+# 호스트 기존 미들웨어 컨테이너 정리 (EKS 포트 충돌 방지)
+Write-Info "기존 호스트 독립형 컨테이너 정리 중..."
+try { docker stop postgres cassandra redis zookeeper kafka api-gateway user-service order-service product-service notification-service 2>$null } catch {}
+try { docker rm postgres cassandra redis zookeeper kafka api-gateway user-service order-service product-service notification-service 2>$null } catch {}
+
+# 1. LocalStack 시작
+Write-Header "Step 1/8: LocalStack AWS 컨테이너 시작 중..."
+docker-compose up -d localstack
 Write-Success "LocalStack 컨테이너 구동 완료"
 
 Write-Info "LocalStack 헬스체크 대기..."
@@ -77,7 +82,7 @@ docker build -t user-service:latest "$ProjectRoot\services\user-service"
 docker build -t product-service:latest "$ProjectRoot\services\product-service"
 docker build -t order-service:latest "$ProjectRoot\services\order-service"
 docker build -t notification-service:latest "$ProjectRoot\services\notification-service"
-Write-Success "5개 서비스 도커 이미지 빌드 완료"
+Write-Success "5개 마이크로서비스 도커 이미지 빌드 완료"
 
 # 5. 도커 이미지를 EKS 노드(k3d)로 임포트
 Write-Header "Step 5/8: 도커 이미지를 EKS 쿠버네티스 노드로 주입 중..."
@@ -96,29 +101,31 @@ kubectl apply -f "$ProjectRoot\k8s\04-statefulset.yaml"
 kubectl apply -f "$ProjectRoot\k8s\05-deployment.yaml"
 kubectl apply -f "$ProjectRoot\k8s\06-service.yaml"
 
-Write-Info "데이터베이스 Pod 준공 대기..."
+Write-Info "EKS 데이터베이스 및 인프라 Pod 준공 대기..."
 kubectl wait --for=condition=ready pod/postgres-0 -n bigdataplatform --timeout=180s
+kubectl wait --for=condition=ready pod/cassandra-0 -n bigdataplatform --timeout=180s
 kubectl wait --for=condition=ready pod/redis-0 -n bigdataplatform --timeout=180s
+kubectl wait --for=condition=ready pod/kafka-0 -n bigdataplatform --timeout=180s
 
-Write-Info "PostgreSQL 쿠버네티스 스키마 생성 중..."
+Write-Info "EKS PostgreSQL (postgres-0) 스키마 생성 중..."
 Start-Sleep -Seconds 5
 Get-Content "$ProjectRoot\scripts\setup-database.sql" | kubectl exec -i -n bigdataplatform postgres-0 -- psql -h 127.0.0.1 -U admin -d microservices
 
-Write-Info "Cassandra 및 Kafka 토픽 초기화 중..."
-try { Get-Content "$ProjectRoot\scripts\setup-cassandra.cql" | docker exec -i cassandra cqlsh 2>$null } catch {}
-try { docker exec kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 --topic orders 2>$null } catch {}
+Write-Info "EKS Cassandra (cassandra-0) NoSQL 스키마 생성 중..."
+Get-Content "$ProjectRoot\scripts\setup-cassandra.cql" | kubectl exec -i -n bigdataplatform cassandra-0 -- cqlsh
 
-Write-Success "Kubernetes 매니페스트 및 데이터베이스 배포 완료"
+Write-Info "EKS Kafka (kafka-0) 토픽 생성 중..."
+try { kubectl exec -n bigdataplatform kafka-0 -- kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --topic orders 2>$null } catch {}
+
+Write-Success "EKS 쿠버네티스 매니페스트 및 데이터베이스 배포 완료"
 
 # 7. 마이크로서비스 구동 대기
 Write-Header "Step 7/8: EKS 쿠버네티스 마이크로서비스 초기화 대기 중..."
-Write-Info "스프링 부트 마이크로서비스 초기화 대기 (45초)..."
-Start-Sleep -Seconds 45
+Write-Info "스프링 부트 마이크로서비스 초기화 대기 (30초)..."
+Start-Sleep -Seconds 30
 
 # 8. 포트 포워딩 및 E2E API 테스트
 Write-Header "Step 8/8: API Gateway 포트 포워딩 및 통합 API 시나리오 테스트..."
-# 기존 독립 실행형 마이크로서비스 컨테이너 삭제 (포트 충돌 방지)
-try { docker rm -f api-gateway user-service order-service product-service notification-service 2>$null } catch {}
 Get-Process -Name "kubectl" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 Start-Process powershell -ArgumentList "-Command kubectl port-forward -n bigdataplatform service/api-gateway 8080:8080" -WindowStyle Hidden
