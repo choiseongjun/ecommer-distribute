@@ -63,13 +63,14 @@ if (-not $ClusterList) {
 }
 
 $ClusterName = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 cluster list --no-headers | ForEach-Object { $_.Split()[0] })
-$KubeCfg = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 kubeconfig get $ClusterName) -replace 'host.docker.internal', '127.0.0.1'
+$KubeCfgRaw = docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 kubeconfig get $ClusterName
+$KubeCfg = ($KubeCfgRaw -join "`n") -replace 'host.docker.internal', '127.0.0.1'
 
 $KubeDir = "$env:USERPROFILE\.kube"
 if (-not (Test-Path $KubeDir)) { New-Item -ItemType Directory -Path $KubeDir -Force }
 $KubeFile = "$KubeDir\config"
 
-# UTF-8 Without BOM 저장 (YAML 파싱 에러 방지)
+# 개행 문자 유지 및 UTF-8 Without BOM 저장 (YAML 파싱 에러 방지)
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($KubeFile, $KubeCfg, $Utf8NoBom)
 $env:KUBECONFIG = $KubeFile
