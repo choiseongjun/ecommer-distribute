@@ -58,7 +58,12 @@ Write-Success "AWS S3 및 IAM 리소스 생성 완료"
 Write-Header "Step 3/8: LocalStack k3d EKS 클러스터 연결 및 노드 스케줄링 설정..."
 $ClusterName = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 cluster list --no-headers | ForEach-Object { $_.Split()[0] })
 $KubeCfg = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 kubeconfig get $ClusterName) -replace 'host.docker.internal', '127.0.0.1'
-$KubeCfg | Out-File -Encoding ascii "$env:USERPROFILE\.kube\config"
+
+$KubeDir = "$env:USERPROFILE\.kube"
+if (-not (Test-Path $KubeDir)) { New-Item -ItemType Directory -Path $KubeDir -Force }
+$KubeFile = "$KubeDir\config"
+[System.IO.File]::WriteAllText($KubeFile, $KubeCfg)
+$env:KUBECONFIG = $KubeFile
 
 try { kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>$null } catch {}
 try { kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>$null } catch {}
@@ -126,10 +131,9 @@ Start-Sleep -Seconds 30
 
 # 8. 포트 포워딩 및 E2E API 테스트
 Write-Header "Step 8/8: API Gateway 포트 포워딩 및 통합 API 시나리오 테스트..."
-Get-Process -Name "kubectl" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-
-Start-Process powershell -ArgumentList "-Command kubectl port-forward -n bigdataplatform service/api-gateway 8080:8080" -WindowStyle Hidden
-Start-Sleep -Seconds 5
+$PF_Cmd = "`$env:KUBECONFIG='$KubeFile'; `$env:Path='$($env:Path)'; kubectl port-forward -n bigdataplatform service/api-gateway 8080:8080"
+Start-Process powershell -ArgumentList "-Command $PF_Cmd" -WindowStyle Hidden
+Start-Sleep -Seconds 6
 
 python "$ProjectRoot\scripts\test-api.py"
 
