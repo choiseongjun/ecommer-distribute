@@ -56,6 +56,12 @@ Write-Success "AWS S3 및 IAM 리소스 생성 완료"
 
 # 3. Kubeconfig 및 Node Taint 설정
 Write-Header "Step 3/8: LocalStack k3d EKS 클러스터 연결 및 노드 스케줄링 설정..."
+$ClusterList = docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 cluster list --no-headers 2>$null
+if (-not $ClusterList) {
+    Write-Info "LocalStack EKS k3d 클러스터가 없어 신규 구성을 진행합니다..."
+    docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 cluster create bigdataplatform
+}
+
 $ClusterName = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 cluster list --no-headers | ForEach-Object { $_.Split()[0] })
 $KubeCfg = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-amd64 kubeconfig get $ClusterName) -replace 'host.docker.internal', '127.0.0.1'
 
