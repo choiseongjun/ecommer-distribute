@@ -1,0 +1,84 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: http://user-service:8081
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: user-service
+                fallbackUri: forward:/fallback/users
+        
+        - id: order-service
+          uri: http://order-service:8082
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/orders
+        
+        - id: product-service
+          uri: http://product-service:8083
+          predicates:
+            - Path=/api/products/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: product-service
+                fallbackUri: forward:/fallback/products
+        
+        - id: notification-service
+          uri: http://notification-service:8084
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: notification-service
+                fallbackUri: forward:/fallback/notifications
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      show-details: always
+  zipkin:
+    tracing:
+      endpoint: http://jaeger:9411/api/v2/spans
+  tracing:
+    sampling:
+      probability: 1.0
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5000
+        permitted-number-of-calls-in-half-open-state: 3
+      order-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5000
+      product-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5000
+      notification-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5000

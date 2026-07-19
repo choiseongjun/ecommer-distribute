@@ -1,0 +1,29 @@
+# Target build directories
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven
+.m2/
+.mvn/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# IDEs
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# OS / System
+.DS_Store
+Thumbs.db
+*.log

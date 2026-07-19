@@ -1,0 +1,177 @@
+services:
+  # Consul - Service Discovery & Configuration
+  consul:
+    image: consul:1.15
+    container_name: consul
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+    command: agent -server -ui -bootstrap-expect=1 -client=0.0.0.0
+    volumes:
+      - consul_data:/consul/data
+    networks:
+      - microservices-network
+
+  # PostgreSQL - CP Database for User & Order Services
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: microservices
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - microservices-network
+
+  # Cassandra - AP Database for Product Service
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: microservices-cluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_RACK: rack1
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - microservices-network
+
+  # Redis - Cache & Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservices-network
+
+  # Kafka - Message Broker
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - microservices-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - microservices-network
+
+  # Elasticsearch - Search Engine
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - microservices-network
+
+  # Prometheus - Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - microservices-network
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - microservices-network
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - microservices-network
+
+  # LocalStack - AWS Local Simulation
+  localstack:
+    image: localstack/localstack:4.4.0
+    container_name: localstack
+    ports:
+      - "4566:4566"
+      - "4510-4519:4510-4519"
+    environment:
+      - SERVICES=s3,iam,ec2,sqs,sns,dynamodb
+      - DEBUG=1
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "localstack_data:/var/lib/localstack"
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
+
+volumes:
+  consul_data:
+  postgres_data:
+  cassandra_data:
+  redis_data:
+  elasticsearch_data:
+  prometheus_data:
+  grafana_data:
+  localstack_data:

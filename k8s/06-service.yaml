@@ -1,0 +1,252 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cassandra
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: cassandra
+  ports:
+  - port: 9042
+    targetPort: 9042
+    name: cql
+  - port: 7000
+    targetPort: 7000
+    name: intra
+  - port: 7001
+    targetPort: 7001
+    name: tls
+  - port: 9142
+    targetPort: 9142
+    name: ssl
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: zookeeper
+  ports:
+  - port: 2181
+    targetPort: 2181
+    name: client
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: kafka
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: client
+  - port: 9093
+    targetPort: 9093
+    name: internal
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: consul
+  ports:
+  - port: 8500
+    targetPort: 8500
+    name: http
+  - port: 8600
+    targetPort: 8600
+    name: dns
+    protocol: UDP
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+  - port: 9200
+    targetPort: 9200
+    name: http
+  - port: 9300
+    targetPort: 9300
+    name: transport
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: grafana
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: jaeger
+  ports:
+  - port: 5775
+    targetPort: 5775
+    name: zipking
+    protocol: UDP
+  - port: 6831
+    targetPort: 6831
+    name: thrift-compact
+    protocol: UDP
+  - port: 6832
+    targetPort: 6832
+    name: thrift-binary
+    protocol: UDP
+  - port: 5778
+    targetPort: 5778
+    name: config
+  - port: 16686
+    targetPort: 16686
+    name: query
+  - port: 14268
+    targetPort: 14268
+    name: collector
+  - port: 14250
+    targetPort: 14250
+    name: grpc
+  - port: 9411
+    targetPort: 9411
+    name: zipkin
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: user-service
+  ports:
+  - port: 8081
+    targetPort: 8081
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: order-service
+  ports:
+  - port: 8082
+    targetPort: 8082
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: product-service
+  ports:
+  - port: 8083
+    targetPort: 8083
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: bigdataplatform
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - port: 8084
+    targetPort: 8084
+    name: http
+  type: ClusterIP

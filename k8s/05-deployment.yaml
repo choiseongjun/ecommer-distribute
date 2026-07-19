@@ -1,0 +1,682 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consul
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consul
+  template:
+    metadata:
+      labels:
+        app: consul
+    spec:
+      containers:
+      - name: consul
+        image: consul:1.15
+        ports:
+        - containerPort: 8500
+          name: http
+        - containerPort: 8600
+          name: dns
+          protocol: UDP
+        command: ["consul", "agent", "-server", "-ui", "-bootstrap-expect=1", "-client=0.0.0.0", "-data-dir=/consul/data"]
+        volumeMounts:
+        - name: consul-storage
+          mountPath: /consul/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+      volumes:
+      - name: consul-storage
+        persistentVolumeClaim:
+          claimName: consul-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        ports:
+        - containerPort: 9200
+          name: http
+        - containerPort: 9300
+          name: transport
+        env:
+        - name: discovery.type
+          value: "single-node"
+        - name: ES_JAVA_OPTS
+          value: "-Xms512m -Xmx512m"
+        - name: xpack.security.enabled
+          value: "false"
+        volumeMounts:
+        - name: elasticsearch-storage
+          mountPath: /usr/share/elasticsearch/data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: elasticsearch-storage
+        persistentVolumeClaim:
+          claimName: elasticsearch-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+          name: http
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-storage
+          mountPath: /prometheus
+        args:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus'
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-storage
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+      - name: jaeger
+        image: jaegertracing/all-in-one:latest
+        ports:
+        - containerPort: 5775
+          name: zipking
+          protocol: UDP
+        - containerPort: 6831
+          name: thrift-compact
+          protocol: UDP
+        - containerPort: 6832
+          name: thrift-binary
+          protocol: UDP
+        - containerPort: 5778
+          name: config
+        - containerPort: 16686
+          name: query
+        - containerPort: 14268
+          name: collector
+        - containerPort: 14250
+          name: grpc
+        - containerPort: 9411
+          name: zipkin
+        env:
+        - name: COLLECTOR_OTLP_ENABLED
+          value: "true"
+        - name: COLLECTOR_ZIPKIN_HOST_PORT
+          value: ":9411"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: api-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SPRING_PROFILES_ACTIVE
+        - name: CONSUL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_HOST
+        - name: CONSUL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_PORT
+        - name: JAEGER_AGENT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_HOST
+        - name: JAEGER_AGENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_PORT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: user-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: http
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SPRING_PROFILES_ACTIVE
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_NAME
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PORT
+        - name: CONSUL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_HOST
+        - name: CONSUL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_PORT
+        - name: JAEGER_AGENT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_HOST
+        - name: JAEGER_AGENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_PORT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+      - name: order-service
+        image: order-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+          name: http
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SPRING_PROFILES_ACTIVE
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_NAME
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_PASSWORD
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: KAFKA_TOPIC_ORDERS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_TOPIC_ORDERS
+        - name: CONSUL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_HOST
+        - name: CONSUL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_PORT
+        - name: JAEGER_AGENT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_HOST
+        - name: JAEGER_AGENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_PORT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      containers:
+      - name: product-service
+        image: product-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8083
+          name: http
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SPRING_PROFILES_ACTIVE
+        - name: CASSANDRA_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CASSANDRA_HOST
+        - name: CASSANDRA_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CASSANDRA_PORT
+        - name: CASSANDRA_KEYSPACE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CASSANDRA_KEYSPACE
+        - name: CONSUL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_HOST
+        - name: CONSUL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_PORT
+        - name: JAEGER_AGENT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_HOST
+        - name: JAEGER_AGENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_PORT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8083
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8083
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: bigdataplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: notification-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8084
+          name: http
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SPRING_PROFILES_ACTIVE
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PORT
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: KAFKA_TOPIC_ORDERS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_TOPIC_ORDERS
+        - name: CONSUL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_HOST
+        - name: CONSUL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: CONSUL_PORT
+        - name: JAEGER_AGENT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_HOST
+        - name: JAEGER_AGENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JAEGER_AGENT_PORT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
