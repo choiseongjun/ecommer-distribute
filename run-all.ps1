@@ -68,7 +68,10 @@ $KubeCfg = (docker exec localstack /var/lib/localstack/lib/k3d/v5.8.3/k3d-linux-
 $KubeDir = "$env:USERPROFILE\.kube"
 if (-not (Test-Path $KubeDir)) { New-Item -ItemType Directory -Path $KubeDir -Force }
 $KubeFile = "$KubeDir\config"
-[System.IO.File]::WriteAllText($KubeFile, $KubeCfg)
+
+# UTF-8 Without BOM 저장 (YAML 파싱 에러 방지)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($KubeFile, $KubeCfg, $Utf8NoBom)
 $env:KUBECONFIG = $KubeFile
 
 try { kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>$null } catch {}
